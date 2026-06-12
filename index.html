@@ -111,8 +111,8 @@ const MENU = [
   { id:20, name:'Grof Chardonnay 2023 – kozarec',   cat:'Vina na kozarec',    price:4   },
   { id:21, name:'Grof Sauvignon 2021 – kozarec',    cat:'Vina na kozarec',    price:4   },
   { id:22, name:'Grof Rebula – kozarec',            cat:'Vina na kozarec',    price:4   },
-  { id:23, name:'Mali Crudo',                       cat:'Hrana',              price:22  },
-  { id:24, name:'Veliki Crudo',                     cat:'Hrana',              price:33  },
+  { id:23, name:'Mali Crudo', cid:'000103',                       cat:'Hrana',              price:22  },
+  { id:24, name:'Veliki Crudo', cid:'000104',                     cat:'Hrana',              price:33  },
   { id:25, name:'Škampi Jadran III.',               cat:'Hrana',              price:45  },
 ];
 
@@ -181,7 +181,7 @@ async function sendToShopsy(tableNum) {
       CustomerId: custId || undefined,
       CustomerCid: custId ? undefined : CUSTOMER_CID,
       Note: 'Miza ' + tableNum,
-      DocumentItems: order.map(item => ({ ItemName: item.name, Quantity: item.qty, Price: item.price, DiscountPercentage: 0 }))
+      DocumentItems: order.map(item => item.cid ? { ItemCid: item.cid, Quantity: item.qty, Price: item.price, DiscountPercentage: 0 } : { ItemName: item.name, Quantity: item.qty, Price: item.price, DiscountPercentage: 0 })
     };
     const r = await fetch(apiUrl + 'v2/documents/customerOrders', {
       method: 'POST',
