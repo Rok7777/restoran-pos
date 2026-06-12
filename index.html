@@ -15,11 +15,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .table-pill { width: 48px; height: 48px; border-radius: 8px; border: 1px solid #e5e5e5; background: #fff; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; -webkit-tap-highlight-color: transparent; }
 .table-pill.has-items { border-color: #378ADD; background: #E6F1FB; }
 .table-pill.active { border: 2px solid #1D9E75; background: #E1F5EE; }
+.table-pill.sent { border-color: #EF9F27; background: #FAEEDA; }
+.table-pill.active.sent { border: 2px solid #EF9F27; background: #FAEEDA; }
 .table-pill .t-num { font-size: 15px; font-weight: 600; color: #111; }
 .table-pill .t-dot { width: 6px; height: 6px; border-radius: 50%; background: #378ADD; margin-top: 3px; }
 .table-pill.active .t-num { color: #0F6E56; }
 .table-pill.active .t-dot { background: #1D9E75; }
-.table-pill.has-items:not(.active) .t-num { color: #185FA5; }
+.table-pill.has-items:not(.active):not(.sent) .t-num { color: #185FA5; }
+.table-pill.sent .t-num { color: #854F0B; }
+.table-pill.sent .t-dot { background: #EF9F27; }
 .settings-pill { margin-top: auto; background: #f5f5f5; font-size: 18px; }
 
 .order-col { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #fff; }
@@ -29,7 +33,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .status-badge.ok { background: #E1F5EE; color: #0F6E56; }
 .status-badge.err { background: #FCEBEB; color: #A32D2D; }
 
-/* Order items with swipe-to-delete */
 .order-items { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .order-row-wrap { position: relative; overflow: hidden; }
 .delete-bg { position: absolute; right: 0; top: 0; bottom: 0; width: 80px; background: #E24B4A; display: flex; align-items: center; justify-content: center; color: white; font-size: 13px; font-weight: 500; }
@@ -41,9 +44,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .qty-btn { width: 28px; height: 28px; border-radius: 50%; border: 1px solid #ddd; background: #f5f5f5; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; color: #111; -webkit-tap-highlight-color: transparent; }
 .qty-num { font-size: 13px; font-weight: 600; min-width: 18px; text-align: center; }
 
-/* Dropdown menu */
-.dropdown-section { border-top: 1px solid #e5e5e5; background: #fff; }
-.dropdown-toggle { width: 100%; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; background: #fff; border: none; font-size: 13px; color: #666; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.dropdown-section { border-top: 3px solid #EF9F27; background: #fff; }
+.dropdown-toggle { width: 100%; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; background: #FAEEDA; border: none; font-size: 13px; font-weight: 600; color: #854F0B; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .dropdown-toggle .arrow { font-size: 10px; transition: transform 0.2s; }
 .dropdown-toggle.open .arrow { transform: rotate(180deg); }
 .dropdown-list { max-height: 0; overflow: hidden; transition: max-height 0.25s ease; }
@@ -78,7 +80,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .settings-info { font-size: 11px; color: #aaa; margin-top: 8px; line-height: 1.6; }
 .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: #1D9E75; color: white; padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 500; z-index: 200; white-space: nowrap; box-shadow: 0 2px 12px rgba(0,0,0,0.15); }
 .toast.err { background: #E24B4A; }
-@keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -86,7 +87,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <div class="tables-col" id="tablesCol"></div>
   <div class="order-col" id="orderCol"></div>
 </div>
-
 <script>
 const MENU = [
   { id:1,  name:'Grof Rosé',                       cat:'Sveža vina',         price:14  },
@@ -124,14 +124,25 @@ const CUSTOMER_CID = '000001';
 const EMAIL = 'natasa@oltre-con.com';
 
 let selectedTable = null;
-let orders = {};
-for(let i=1;i<=NUM_TABLES;i++) orders[i]=[];
-let settings = { password: localStorage.getItem('shopsy_pass') || '' };
 let dropdownOpen = false;
+let settings = { password: localStorage.getItem('shopsy_pass') || '' };
+
+// orders: { 1: { items: [], sent: false }, ... }
+function loadOrders() {
+  try {
+    const raw = localStorage.getItem('pos_orders');
+    if(raw) return JSON.parse(raw);
+  } catch {}
+  const o = {};
+  for(let i=1;i<=NUM_TABLES;i++) o[i] = { items: [], sent: false };
+  return o;
+}
+function saveOrders() { localStorage.setItem('pos_orders', JSON.stringify(orders)); }
+let orders = loadOrders();
 
 const fmt = n => n.toFixed(2).replace('.',',') + ' €';
-const tableTotal = t => (orders[t]||[]).reduce((s,i)=>s+i.price*i.qty,0);
-const tableCount = t => (orders[t]||[]).reduce((s,i)=>s+i.qty,0);
+const tableTotal = t => (orders[t]?.items||[]).reduce((s,i)=>s+i.price*i.qty,0);
+const tableCount = t => (orders[t]?.items||[]).reduce((s,i)=>s+i.qty,0);
 const getAuth = () => 'Basic ' + btoa(EMAIL + ':' + settings.password);
 
 async function getServiceUrl() {
@@ -158,7 +169,7 @@ async function getCustomerId(apiUrl) {
 
 async function sendToShopsy(tableNum) {
   if(!settings.password) { showToast('Nastavi geslo v nastavitvah ⚙️', true); return; }
-  const order = orders[tableNum];
+  const order = orders[tableNum]?.items || [];
   if(!order.length) return;
   showToast('⏳ Pošiljam v Shopsy...', false, true);
   try {
@@ -178,8 +189,15 @@ async function sendToShopsy(tableNum) {
       body: JSON.stringify(body)
     });
     document.querySelector('.toast')?.remove();
-    if(r.ok) { orders[tableNum]=[]; renderAll(); showToast('✓ Osnutek poslan v Shopsy!'); }
-    else { const e=await r.text(); showToast('Napaka '+r.status+': '+e.substring(0,50), true); }
+    if(r.ok) {
+      orders[tableNum].sent = true;
+      saveOrders();
+      renderAll();
+      showToast('✓ Osnutek poslan v Shopsy!');
+    } else {
+      const e = await r.text();
+      showToast('Napaka ' + r.status + ': ' + e.substring(0,50), true);
+    }
   } catch(e) { document.querySelector('.toast')?.remove(); showToast('Napaka pri povezavi', true); }
 }
 
@@ -192,35 +210,23 @@ function showToast(msg, isErr=false, persist=false) {
   if(!persist) setTimeout(()=>el.remove(), 3000);
 }
 
-// Swipe to delete
 function attachSwipe(wrap, id) {
   const row = wrap.querySelector('.order-row');
   let startX=0, curX=0, dragging=false;
   const THRESHOLD = 80;
-
-  const onStart = e => {
-    startX = e.touches ? e.touches[0].clientX : e.clientX;
-    curX = 0; dragging = true;
-    row.style.transition = 'none';
-  };
+  const onStart = e => { startX = e.touches?e.touches[0].clientX:e.clientX; curX=0; dragging=true; row.style.transition='none'; };
   const onMove = e => {
     if(!dragging) return;
-    const x = (e.touches ? e.touches[0].clientX : e.clientX) - startX;
-    if(x > 0) return;
-    curX = x;
-    row.style.transform = `translateX(${Math.max(x, -THRESHOLD)}px)`;
+    const x = (e.touches?e.touches[0].clientX:e.clientX) - startX;
+    if(x>0) return;
+    curX=x; row.style.transform=`translateX(${Math.max(x,-THRESHOLD)}px)`;
     if(e.cancelable) e.preventDefault();
   };
   const onEnd = () => {
-    if(!dragging) return;
-    dragging = false;
-    row.style.transition = 'transform 0.2s ease';
-    if(curX <= -THRESHOLD) {
-      row.style.transform = 'translateX(-100%)';
-      setTimeout(() => { removeItem(id); }, 200);
-    } else {
-      row.style.transform = 'translateX(0)';
-    }
+    if(!dragging) return; dragging=false;
+    row.style.transition='transform 0.2s ease';
+    if(curX<=-THRESHOLD) { row.style.transform='translateX(-100%)'; setTimeout(()=>removeItem(id),200); }
+    else row.style.transform='translateX(0)';
   };
   wrap.addEventListener('touchstart', onStart, {passive:true});
   wrap.addEventListener('touchmove', onMove, {passive:false});
@@ -232,23 +238,31 @@ function attachSwipe(wrap, id) {
 
 function removeItem(id) {
   if(!selectedTable) return;
-  orders[selectedTable] = orders[selectedTable].filter(i=>i.id!==id);
-  renderTables(); renderOrder();
+  orders[selectedTable].items = orders[selectedTable].items.filter(i=>i.id!==id);
+  saveOrders(); renderTables(); renderOrderItems();
 }
 
 function renderTables() {
   const col = document.getElementById('tablesCol');
   col.innerHTML = '';
   for(let i=1;i<=NUM_TABLES;i++) {
-    const cnt=tableCount(i), isActive=selectedTable===i, hasItems=cnt>0;
-    const btn=document.createElement('button');
-    btn.className='table-pill'+(isActive?' active':'')+(hasItems&&!isActive?' has-items':'');
-    btn.innerHTML=`<span class="t-num">${i}</span>${(hasItems||isActive)?'<span class="t-dot"></span>':''}`;
-    btn.onclick=()=>{ selectedTable=i; dropdownOpen=false; renderAll(); };
+    const cnt = tableCount(i);
+    const isActive = selectedTable===i;
+    const sent = orders[i]?.sent;
+    const hasItems = cnt>0;
+    const btn = document.createElement('button');
+    let cls = 'table-pill';
+    if(isActive && sent) cls += ' active sent';
+    else if(isActive) cls += ' active';
+    else if(sent) cls += ' sent';
+    else if(hasItems) cls += ' has-items';
+    btn.className = cls;
+    btn.innerHTML = `<span class="t-num">${i}</span>${(hasItems||isActive)?'<span class="t-dot"></span>':''}`;
+    btn.onclick = () => { selectedTable=i; dropdownOpen=false; renderAll(); };
     col.appendChild(btn);
   }
-  const sp=document.createElement('div'); sp.style.flex='1'; col.appendChild(sp);
-  const sb=document.createElement('button');
+  const sp = document.createElement('div'); sp.style.flex='1'; col.appendChild(sp);
+  const sb = document.createElement('button');
   sb.className='table-pill settings-pill'; sb.title='Nastavitve'; sb.textContent='⚙️';
   sb.onclick=showSettings; col.appendChild(sb);
 }
@@ -268,53 +282,49 @@ function buildDropdownList() {
 }
 
 function toggleDropdown() {
-  dropdownOpen = !dropdownOpen;
-  const list = document.getElementById('dropdownList');
-  const toggle = document.getElementById('dropdownToggle');
-  if(list && toggle) {
-    list.classList.toggle('open', dropdownOpen);
-    toggle.classList.toggle('open', dropdownOpen);
-  }
+  dropdownOpen=!dropdownOpen;
+  document.getElementById('dropdownList')?.classList.toggle('open', dropdownOpen);
+  document.getElementById('dropdownToggle')?.classList.toggle('open', dropdownOpen);
 }
 
 function addItem(id) {
   if(!selectedTable) return;
   const item=MENU.find(i=>i.id===id);
   if(!item) return;
-  const order=orders[selectedTable];
-  const ex=order.find(i=>i.id===id);
-  if(ex) ex.qty++; else order.push({...item,qty:1});
-  renderTables(); renderOrderItems();
+  const items=orders[selectedTable].items;
+  const ex=items.find(i=>i.id===id);
+  if(ex) ex.qty++; else items.push({...item,qty:1});
+  orders[selectedTable].sent = false;
+  saveOrders(); renderTables(); renderOrderItems();
 }
 
 function changeQty(id, delta) {
   if(!selectedTable) return;
-  const order=orders[selectedTable];
-  const idx=order.findIndex(i=>i.id===id);
+  const items=orders[selectedTable].items;
+  const idx=items.findIndex(i=>i.id===id);
   if(idx<0) return;
-  order[idx].qty+=delta;
-  if(order[idx].qty<=0) { order.splice(idx,1); }
-  renderTables(); renderOrderItems();
+  items[idx].qty+=delta;
+  if(items[idx].qty<=0) items.splice(idx,1);
+  saveOrders(); renderTables(); renderOrderItems();
 }
 
 function renderOrderItems() {
-  const container = document.getElementById('orderItemsContainer');
-  const totalEl = document.getElementById('totalAmount');
-  const btnCheckout = document.getElementById('btnCheckout');
-  const btnClear = document.getElementById('btnClear');
+  const container=document.getElementById('orderItemsContainer');
+  const totalEl=document.getElementById('totalAmount');
+  const btnCheckout=document.getElementById('btnCheckout');
+  const btnClear=document.getElementById('btnClear');
   if(!container) return;
+  const items=selectedTable?orders[selectedTable].items:[];
+  const total=selectedTable?tableTotal(selectedTable):0;
 
-  const order = selectedTable ? orders[selectedTable] : [];
-  const total = selectedTable ? tableTotal(selectedTable) : 0;
-
-  if(!order.length) {
-    container.innerHTML = `<div class="empty-state">${selectedTable?'Dodaj artikel spodaj':'👆 Izberi mizo na levi'}</div>`;
+  if(!items.length) {
+    container.innerHTML=`<div class="empty-state">${selectedTable?'Dodaj artikel spodaj':'👆 Izberi mizo na levi'}</div>`;
   } else {
-    container.innerHTML = '';
-    order.forEach(item => {
-      const wrap = document.createElement('div');
-      wrap.className = 'order-row-wrap';
-      wrap.innerHTML = `
+    container.innerHTML='';
+    items.forEach(item=>{
+      const wrap=document.createElement('div');
+      wrap.className='order-row-wrap';
+      wrap.innerHTML=`
         <div class="delete-bg">Briši</div>
         <div class="order-row">
           <div class="order-row-name">${item.name}</div>
@@ -329,22 +339,20 @@ function renderOrderItems() {
       attachSwipe(wrap, item.id);
     });
   }
-
-  if(totalEl) totalEl.textContent = fmt(total);
-  if(btnCheckout) btnCheckout.disabled = !order.length;
-  if(btnClear) btnClear.disabled = !order.length;
+  if(totalEl) totalEl.textContent=fmt(total);
+  if(btnCheckout) btnCheckout.disabled=!items.length;
+  if(btnClear) btnClear.disabled=!items.length;
 }
 
 function renderOrder() {
-  const col = document.getElementById('orderCol');
-  const hasPass = !!settings.password;
-  const noTable = !selectedTable;
+  const col=document.getElementById('orderCol');
+  const hasPass=!!settings.password;
+  const noTable=!selectedTable;
+  const badge=hasPass
+    ?'<span class="status-badge ok">● Shopsy</span>'
+    :'<span class="status-badge err">⚠ Nastavi geslo</span>';
 
-  const badge = hasPass
-    ? '<span class="status-badge ok">● Shopsy</span>'
-    : '<span class="status-badge err">⚠ Nastavi geslo</span>';
-
-  col.innerHTML = `
+  col.innerHTML=`
     <div class="topbar">
       <span class="topbar-title">${selectedTable?'Miza '+selectedTable:'Naročilo'}</span>
       ${badge}
@@ -355,9 +363,7 @@ function renderOrder() {
         <span>+ Dodaj artikel</span>
         <span class="arrow">▼</span>
       </button>
-      <div class="dropdown-list" id="dropdownList">
-        ${buildDropdownList()}
-      </div>
+      <div class="dropdown-list" id="dropdownList">${buildDropdownList()}</div>
     </div>
     <div class="order-footer">
       <div class="total-row">
@@ -365,23 +371,29 @@ function renderOrder() {
         <span class="total-amount" id="totalAmount">${fmt(selectedTable?tableTotal(selectedTable):0)}</span>
       </div>
       <button id="btnCheckout" class="btn-checkout ${!hasPass?'needs-setup':''}" onclick="${hasPass?'checkout()':'showSettings()'}" disabled>
-        ${hasPass ? '📤 Pošlji v Shopsy' : '⚙️ Nastavi geslo'}
+        ${hasPass?'📤 Pošlji v Shopsy':'⚙️ Nastavi geslo'}
       </button>
       <button id="btnClear" class="btn-clear" onclick="clearTable()" disabled>🗑 Počisti mizo</button>
     </div>`;
-
   renderOrderItems();
+  if(dropdownOpen) {
+    document.getElementById('dropdownList')?.classList.add('open');
+    document.getElementById('dropdownToggle')?.classList.add('open');
+  }
 }
 
 function clearTable() {
-  if(!selectedTable||!orders[selectedTable].length) return;
-  if(confirm('Počisti mizo '+selectedTable+'?')) { orders[selectedTable]=[]; renderAll(); }
+  if(!selectedTable||!orders[selectedTable].items.length) return;
+  if(confirm('Počisti mizo '+selectedTable+'?')) {
+    orders[selectedTable]={items:[],sent:false};
+    saveOrders(); renderAll();
+  }
 }
 
 function checkout() {
-  if(!selectedTable||!orders[selectedTable].length) return;
-  const order=orders[selectedTable];
-  const lines=order.map(i=>`${i.qty}× ${i.name} – ${fmt(i.price*i.qty)}`).join('\n');
+  if(!selectedTable||!orders[selectedTable].items.length) return;
+  const items=orders[selectedTable].items;
+  const lines=items.map(i=>`${i.qty}× ${i.name} – ${fmt(i.price*i.qty)}`).join('\n');
   const t=tableTotal(selectedTable), tbl=selectedTable;
   if(confirm('Pošlji v Shopsy?\n\nMiza '+tbl+'\n'+lines+'\n\nSkupaj: '+fmt(t))) sendToShopsy(tbl);
 }
@@ -410,7 +422,7 @@ function showSettings() {
 
 function saveSettings() {
   const p=document.getElementById('settingsPass');
-  if(p){ settings.password=p.value.trim(); localStorage.setItem('shopsy_pass',settings.password); }
+  if(p){settings.password=p.value.trim();localStorage.setItem('shopsy_pass',settings.password);}
   document.querySelector('.modal-overlay')?.remove();
   renderOrder();
   showToast('Nastavitve shranjene');
