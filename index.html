@@ -124,7 +124,37 @@ const EMAIL = 'natasa@oltre-con.com';
 
 let selectedTable = null;
 let dropdownOpen = false;
-let settings = { password: localStorage.getItem('shopsy_pass') || '' };
+let settings = { password: localStorage.getItem("shopsy_pass") || "" };
+
+const JSONBIN_ID = "6a2f9986f5f4af5e29f3555a";
+const JSONBIN_KEY = "$2a$10$IBGvib8ASeB8LqVLUt4L7OCwpwZeuOMkeIHWkm33sfm66B7C9rXd2";
+const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_ID}`;
+
+async function loadFromCloud() {
+  try {
+    const r = await fetch(JSONBIN_URL + "/latest", {
+      headers: { "X-Master-Key": JSONBIN_KEY }
+    });
+    if(r.ok) {
+      const d = await r.json();
+      const data = d.record;
+      for(let i=1;i<=NUM_TABLES;i++) {
+        if(data[i]) orders[i] = data[i];
+      }
+      renderAll();
+    }
+  } catch(e) { console.error("Cloud load error:", e); }
+}
+
+async function saveToCloud() {
+  try {
+    await fetch(JSONBIN_URL, {
+      method: "PUT",
+      headers: { "X-Master-Key": JSONBIN_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify(orders)
+    });
+  } catch(e) { console.error("Cloud save error:", e); }
+}
 
 function loadOrders() {
   try {
@@ -135,7 +165,10 @@ function loadOrders() {
   for(let i=1;i<=NUM_TABLES;i++) o[i] = { items: [], sent: false };
   return o;
 }
-function saveOrders() { localStorage.setItem('pos_orders', JSON.stringify(orders)); }
+function saveOrders() {
+  localStorage.setItem("pos_orders", JSON.stringify(orders));
+  saveToCloud();
+}
 let orders = loadOrders();
 
 const fmt = n => n.toFixed(2).replace('.',',') + ' €';
@@ -493,7 +526,8 @@ function saveSettings() {
 }
 
 function renderAll() { renderTables(); renderOrder(); }
-renderAll();
+// Load from cloud on startup, fallback to localStorage
+loadFromCloud().catch(() => renderAll());
 </script>
 </body>
 </html>
